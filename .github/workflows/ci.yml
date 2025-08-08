@@ -3,8 +3,7 @@ name: Backend CI
 on:
   push:
     branches:
-      - main  # Trigger CI on pushes to the main branch
-
+      - main
 
 jobs:
   test:
@@ -13,74 +12,64 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [22] # Test on multiple Node.js versions
+        node-version: [22]
 
-
-    environment: MONGO_URI
+    env:
+      MONGO_URI: ${{ secrets.MONGO_URI }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      PORT: ${{ secrets.PORT }}
+      NODE_ENV: production
 
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v3
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
-    # Set up Node.js
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: ${{ matrix.node-version }}
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
 
-    - name: Print Env Secret
+      - name: Check Secrets Presence
+        run: |
+          [ -n "$MONGO_URI" ] && echo "MONGO_URI: OK" || (echo "MONGO_URI: MISSING" && exit 1)
+          [ -n "$JWT_SECRET" ] && echo "JWT_SECRET: OK" || (echo "JWT_SECRET: MISSING" && exit 1)
+          [ -n "$PORT" ] && echo "PORT: OK" || (echo "PORT: MISSING" && exit 1)
 
-      env:
-        MONGO_URI: ${{ secrets.MONGO_URI }}
-        JWT_SECRET: ${{ secrets.JWT_SECRET }}
-        PORT: ${{ secrets.PORT }}
-      run: | 
-        echo "Secret 1 is: $MONGO_URI"
-        echo "Secret 2 is: $JWT_SECRET"
-        echo "Secret 3 is: $PORT"
-      
-    - run: pm2 stop all
+      - run: pm2 stop all || true
 
-    # Install dependencies for backend
-    - name: Install Backend Dependencies
-      working-directory: ./backend
-      run: | 
-       npm install --global yarn
-       yarn --version
-       yarn install
-      
-    # Install dependencies for frontend
-    - name: Install Frontend Dependencies
-      working-directory: ./frontend
-      run: |
-        df -h
-        sudo rm -rf ./build
-        yarn install
-        yarn run build
+      # Backend deps
+      - name: Install Backend Dependencies
+        working-directory: ./backend
+        run: |
+          npm install --global yarn
+          yarn --version
+          yarn install
 
+      # Frontend deps & build
+      - name: Install Frontend Dependencies
+        working-directory: ./frontend
+        run: |
+          df -h
+          sudo rm -rf ./build
+          yarn install
+          yarn run build
 
-    # Run backend tests
-    - name: Run Backend Tests
-      env:
-        MONGO_URI: ${{ secrets.MONGO_URI }}
-        JWT_SECRET: ${{ secrets.JWT_SECRET }}
-        PORT: ${{ secrets.PORT }}
-      working-directory: ./backend
-      run: npm test
+      # Tests
+      - name: Run Backend Tests
+        working-directory: ./backend
+        run: npm test
 
+      - name: Create .env file
+        working-directory: ./backend
+        run: |
+          echo "MONGO_URI=$MONGO_URI" > .env
+          echo "JWT_SECRET=$JWT_SECRET" >> .env
+          echo "PORT=$PORT" >> .env
+          echo "NODE_ENV=production" >> .env
 
-    - run: npm ci
-    - run: | 
-        cd ./backend
-        touch .env
-        echo "${{ secrets.PROD }}" > .env
-
-    - run: pm2 start all
-
-    - run: pm2 restart all
-
-
-
-
-
-    
+      - name: Start PM2
+        working-directory: ./backend
+        run: |
+          pm2 delete all || true
+          pm2 start ecosystem.config.js --env production --update-env
+          pm2 save
