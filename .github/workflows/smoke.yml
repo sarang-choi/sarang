@@ -1,0 +1,9 @@
+name: Smoke
+on:
+  push:
+    branches: [main]
+jobs:
+  ping:
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - run: echo "runner ok"
