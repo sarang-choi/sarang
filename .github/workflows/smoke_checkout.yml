@@ -1,0 +1,15 @@
+name: Smoke Checkout
+on:
+  push:
+    branches: [main]
+
+jobs:
+  ping:
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Show workspace
+        run: |
+          echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
+          ls -al
