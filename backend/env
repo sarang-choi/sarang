@@ -1,0 +1,57 @@
+jobs:
+  test:
+    runs-on: [self-hosted, Linux, X64]
+
+    env:
+      MONGO_URI: ${{ secrets.MONGO_URI }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      PORT: ${{ secrets.PORT }}
+      NODE_ENV: production
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 22
+
+      - name: Check Secrets Exist
+        run: |
+          for v in MONGO_URI JWT_SECRET PORT; do
+            if [ -z "${!v}" ]; then
+              echo "::error::$v is EMPTY"
+              exit 1
+            else
+              echo "$v is set ✅"
+            fi
+          done
+
+      - name: Install Backend Dependencies
+        working-directory: ./backend
+        run: yarn install
+
+      - name: Install Frontend Dependencies
+        working-directory: ./frontend
+        run: |
+          df -h
+          sudo rm -rf ./build
+          yarn install
+          yarn run build
+
+      - name: Run Backend Tests
+        working-directory: ./backend
+        run: npm test
+
+      - name: Create .env file
+        working-directory: ./backend
+        run: |
+          cat > .env <<EOF
+          MONGO_URI=${MONGO_URI}
+          JWT_SECRET=${JWT_SECRET}
+          PORT=${PORT}
+          NODE_ENV=production
+          EOF
+
+      - name: Restart PM2 with updated env
+        working-directory: ./backend
+        run: pm2 restart all --update-env
